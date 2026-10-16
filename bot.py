@@ -1,84 +1,75 @@
-import os
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+ import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+
+# --- KEEP ALIVE SERVER FOR RENDER (Keeps bot Live for FREE) ---
+class MyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"PIP HUNTERS Bot is Live!")
+    def log_message(self, format, *args):
+        return
+
+def run_keep_alive_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), MyHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_keep_alive_server, daemon=True).start()
+# --- END KEEP ALIVE SERVER ---
 
 TOKEN = os.getenv("BOT_TOKEN")
 DERIV_LINK = "https://t.deriv.link?t=N886WMZM3C76"
-FREE_CHANNEL = "https://t.me/PipHuntersSignals1"
-ADMIN_USERNAME = "@PipHuntersSignals2"
+CHANNEL = "https://t.me/PipHuntersSignals1"
+USERNAME = "@PipHuntersSignals2"
 
-WELCOME_TEXT = """🔥 Welcome to PIP HUNTERS SIGNAL ASSISTANT 🔥
+WELCOME_TEXT = """🔥 Welcome to PIP HUNTERS SIGNALS 🔥
 
-Your #1 Source for Premium Forex & Synthetic Signals
-🎯 85-90% Accuracy
+We provide FREE Forex Signals Daily!
 
-👇 Choose from menu:"""
+Click below to get started 👇
+"""
 
-VIP_TEXT = """💎 Get VIP Access
-- 5-7 Signals daily
-- 95% Accuracy
-
-How to get FREE:
-1. Register: https://t.deriv.link?t=N886WMZM3C76
-2. Send screenshot here
-3. We activate VIP in 10 mins"""
-
-VERIFY_TEXT = """✅ Verify Deriv Registration
-1. Register: https://t.deriv.link?t=N886WMZM3C76
-2. Screenshot your Deriv dashboard
-3. SEND photo here now 👇"""
-
-def main_menu():
+async def start(update, context):
     keyboard = [
-        [InlineKeyboardButton("👋 Welcome! Start Here", callback_data='welcome')],
-        [InlineKeyboardButton("🚀 Join Our Free Channel", url=FREE_CHANNEL)],
-        [InlineKeyboardButton("📊 About Our Forex & Synthetic Signals", callback_data='about')],
-        [InlineKeyboardButton("🆘 Get Help & Support", callback_data='help')],
-        [InlineKeyboardButton("📢 Channel Info & Trading Updates", callback_data='channel_info')],
-        [InlineKeyboardButton("📩 Contact Our Team", callback_data='contact')],
-        [InlineKeyboardButton("🛡️ Trading Risk Management Tips", callback_data='risk')],
-        [InlineKeyboardButton("📝 Register with our trusted broker", url=DERIV_LINK)],
-        [InlineKeyboardButton("💎 Get VIP access now", callback_data='vip')],
-        [InlineKeyboardButton("✅ Verify Deriv Registration", callback_data='verify')],
+        [InlineKeyboardButton("✅ JOIN FREE SIGNALS CHANNEL", url=CHANNEL)],
+        [InlineKeyboardButton("🔗 Create Deriv Account", url=DERIV_LINK)],
+        [InlineKeyboardButton("📞 Contact Admin", url=f"https://t.me/{USERNAME.replace('@','')}")],
+        [InlineKeyboardButton("▶️ How it Works", callback_data="how")]
     ]
-    return InlineKeyboardMarkup(keyboard)
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(WELCOME_TEXT, reply_markup=reply_markup)
 
-def back_menu():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data='main')]])
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(WELCOME_TEXT, reply_markup=main_menu())
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update, context):
     query = update.callback_query
     await query.answer()
-    data = query.data
-    if data in ['main','welcome']:
-        await query.message.reply_text(WELCOME_TEXT, reply_markup=main_menu())
-    elif data == 'about':
-        await query.message.reply_text("📈 About: Forex (EURUSD, XAUUSD) + Synthetic (V75, Boom & Crash). Daily 3-5 setups.", reply_markup=back_menu())
-    elif data == 'help':
-        await query.message.reply_text(f"🆘 Help & Support Contact: {ADMIN_USERNAME}", reply_markup=back_menu())
-    elif data == 'channel_info':
-        await query.message.reply_text("📢 Channel Info Main: @PipHuntersSignals1 - Posts 9AM, 12PM, 4PM GMT", reply_markup=back_menu())
-    elif data == 'contact':
-        await query.message.reply_text(f"📩 Contact Our Team Admin: {ADMIN_USERNAME} Email: piphunters1@gmail.com", reply_markup=back_menu())
-    elif data == 'risk':
-        await query.message.reply_text("🛡️ Risk Management: 1. Risk 1-2% per trade 2. Always use SL 3. Max 3 trades/day", reply_markup=back_menu())
-    elif data == 'vip':
-        kb = [[InlineKeyboardButton("📝 Register Now", url=DERIV_LINK)],[InlineKeyboardButton("✅ Verify Now", callback_data='verify')],[InlineKeyboardButton("⬅️ Back", callback_data='main')]]
-        await query.message.reply_text(VIP_TEXT, reply_markup=InlineKeyboardMarkup(kb))
-    elif data == 'verify':
-        await query.message.reply_text(VERIFY_TEXT, reply_markup=back_menu())
+    if query.data == "how":
+        text = """📈 How PIP HUNTERS Works:
 
-async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"✅ Verification submitted! Contact {ADMIN_USERNAME} for fast approval.", reply_markup=main_menu())
+1️⃣ Join our FREE channel
+2️⃣ Create Deriv account via our link
+3️⃣ Get daily signals + guidance
+
+We help you grow! 💰"""
+        keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="back")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    elif query.data == "back":
+        keyboard = [
+            [InlineKeyboardButton("✅ JOIN FREE SIGNALS CHANNEL", url=CHANNEL)],
+            [InlineKeyboardButton("🔗 Create Deriv Account", url=DERIV_LINK)],
+            [InlineKeyboardButton("📞 Contact Admin", url=f"https://t.me/{USERNAME.replace('@','')}")],
+            [InlineKeyboardButton("▶️ How it Works", callback_data="how")]
+        ]
+        await query.edit_message_text(WELCOME_TEXT, reply_markup=InlineKeyboardMarkup(keyboard))
 
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    print("PIP HUNTERS Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
