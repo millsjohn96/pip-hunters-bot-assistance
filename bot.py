@@ -2,7 +2,7 @@ import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = os.getenv(8664328233:AAF8cn7MP_JOwnF40wTW_ffzn8fpTQpmLBI)
+TOKEN = os.getenv("BOT_TOKEN")
 DERIV_LINK = "https://t.deriv.link?t=N886WMZM3C76"
 FREE_CHANNEL = "https://t.me/PipHuntersSignals1"
 ADMIN_USERNAME = "@PipHuntersSignals2"
