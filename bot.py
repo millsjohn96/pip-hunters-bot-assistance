@@ -165,12 +165,23 @@ async def reminder_job(context: ContextTypes.DEFAULT_TYPE):
             logger.error(e)
 
 def main():
+    if not TOKEN:
+        logger.error("BOT_TOKEN not set!")
+        return
     app_bot = Application.builder().token(TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
     app_bot.add_handler(CommandHandler("broadcast", broadcast))
     app_bot.add_handler(CallbackQueryHandler(button_callback))
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app_bot.job_queue.run_repeating(reminder_job, interval=600, first=30)
+    
+    # Safe job queue - won't crash if missing
+    if app_bot.job_queue:
+        app_bot.job_queue.run_repeating(reminder_job, interval=600, first=30)
+        logger.info("Reminder job started")
+    else:
+        logger.warning("Job queue not available - reminders disabled but bot will still work!")
+    
+    logger.info("Bot starting polling...")
     app_bot.run_polling()
 
 if __name__ == "__main__":
