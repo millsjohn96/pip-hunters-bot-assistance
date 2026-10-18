@@ -1,4 +1,4 @@
-import os, json, logging, threading, datetime
+import os, json, logging, threading, datetime, glob, time, requests
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
@@ -15,11 +15,19 @@ logging.basicConfig(level=logging.INFO)
 
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def home(): return "Pip Hunters Bot V8.9 REAL CHARTS LIVE - 24/7"
+def home(): return "Pip Hunters Bot V10.3 REAL CHARTS + ANTI-SLEEP 24/7 LIVE"
 @flask_app.route('/health')
 def health(): return "OK", 200
 def run_flask():
     flask_app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+
+def keep_alive_ping():
+    while True:
+        time.sleep(600)
+        try:
+            url = os.getenv("RENDER_EXTERNAL_URL")
+            if url: requests.get(url, timeout=10)
+        except: pass
 
 def load_data():
     try:
@@ -73,27 +81,47 @@ def back_menu():
     return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data='main')]])
 
 async def send_real_charts(chat_id, context, include_ebook_text=False):
-    charts = [
-        ("chart_5_m30_14_oct_sweep.jpg", "📊 CHART 1: 14 Oct Sweep Model A\n\n4070 -> 4168.18 = +980 pips\nSweep liquidity then bullish reversal\nEntry at 4129 red box\nTarget 4168 magnet\n\n⚡ Pip Hunters REAL MT5"),
-        ("chart_1_m30_15_16_oct_redboxes.jpg", "📊 CHART 2: 15-16 Oct Red Boxes\n\n4129 & 4168 Breaker Blocks\nM30 showing 4168.18 holding as key\nRed boxes = institutional order blocks\nPrice respects 4168 magnet\n\n⚡ Pip Hunters REAL MT5"),
-        ("chart_3_m30_9_oct_rally.jpg", "📊 CHART 3: 9 Oct Rally\n\n4145 -> 4200+ rally\n5:00 GMT breakout\n4168.18 acted as support\nModel B entry\n\n⚡ Pip Hunters REAL MT5"),
-        ("chart_4_m30_6_7_oct_doubletop.jpg", "📊 CHART 4: 6-7 Oct Double Top\n\n4176.65 double top -> 4055 sweep\n4168.18 breakdown\nWhy 4168 is critical decision point\n\n⚡ Pip Hunters REAL MT5"),
-        ("chart_2_m15_16_oct_holding.jpg", "📊 CHART 5: M15 16 Oct Holding\n\n16 Oct 13:45 - 18:45\n4168.18 holding as support after drop\nM15 MSS entry model\nReal-time hold proof\n\n⚡ Pip Hunters REAL MT5"),
+    # CAPTIONS FOR YOUR 5 REAL CHARTS
+    captions_list = [
+        "📊 CHART 1: 14 Oct Sweep Model A\n\n4070 -> 4168.18 = +980 pips\nSweep liquidity then bullish reversal\nEntry at 4129 red box\nTarget 4168 magnet\n\n⚡ Pip Hunters REAL MT5",
+        "📊 CHART 2: 15-16 Oct Red Boxes\n\n4129 & 4168 Breaker Blocks\nM30 showing 4168.18 holding as key\nRed boxes = institutional order blocks\nPrice respects 4168 magnet\n\n⚡ Pip Hunters REAL MT5",
+        "📊 CHART 3: 9 Oct Rally\n\n4145 -> 4200+ rally\n5:00 GMT breakout\n4168.18 acted as support\nModel B entry\n\n⚡ Pip Hunters REAL MT5",
+        "📊 CHART 4: 6-7 Oct Double Top\n\n4176.65 double top -> 4055 sweep\n4168.18 breakdown\nWhy 4168 is critical decision point\n\n⚡ Pip Hunters REAL MT5",
+        "📊 CHART 5: M15 16 Oct Holding\n\n16 Oct 13:45 - 18:45\n4168.18 holding as support after drop\nM15 MSS entry model\nReal-time hold proof\n\n⚡ Pip Hunters REAL MT5",
     ]
+    # AUTO-FIND: First try proper names, if not found, find ANY 5 images (your IMG- files)
+    proper_files = ["chart_5_m30_14_oct_sweep.jpg","chart_1_m30_15_16_oct_redboxes.jpg","chart_3_m30_9_oct_rally.jpg","chart_4_m30_6_7_oct_doubletop.jpg","chart_2_m15_16_oct_holding.jpg"]
+    found_files = []
+    for f in proper_files:
+        if os.path.exists(f): found_files.append(f)
+    # If proper files not found, use ANY jpg/png you uploaded (IMG-...)
+    if len(found_files) < 5:
+        all_imgs = glob.glob("*.jpg") + glob.glob("*.JPG") + glob.glob("*.jpeg") + glob.glob("*.png") + glob.glob("IMG-*") + glob.glob("*.PNG")
+        all_imgs = sorted(list(set(all_imgs)))
+        # Remove users.json etc, keep only images
+        if len(all_imgs) >= 5:
+            found_files = all_imgs[:5]
+        elif all_imgs:
+            found_files = all_imgs
+
     if include_ebook_text:
         ebook_caption = f"📖 PIP HUNTERS E-BOOK + 5 REAL CHARTS\n\nPrice: $100 FREE today\n\nIncludes:\n• 4168.18 Magnet Explained\n• 10-Point Scoring (7/10 Rule)\n• London & NY Kill Zones\n• $100-$1000 Blueprint\n• Risk Formula\n• 5 REAL MT5 Charts\n\n👇 Below are your 5 REAL charts:\n\nJoin: {FREE_CHANNEL_LINK}\nBroker: {DERIV_LINK}"
         try: await context.bot.send_message(chat_id=chat_id, text=ebook_caption)
         except: pass
-    for filename, caption in charts:
+
+    if not found_files:
+        await context.bot.send_message(chat_id=chat_id, text="⚠️ Charts uploading... please try E-Book button again in 1 minute")
+        return
+
+    for idx, filename in enumerate(found_files):
         try:
+            cap = captions_list[idx] if idx < len(captions_list) else f"📊 REAL MT5 CHART {idx+1}"
             if os.path.exists(filename):
                 with open(filename, 'rb') as photo:
-                    await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=caption)
-            else:
-                await context.bot.send_message(chat_id=chat_id, text=caption + "\n\n[Chart: "+filename+"]")
+                    await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=cap)
         except Exception as e:
             logging.error(f"Failed {filename}: {e}")
-            try: await context.bot.send_message(chat_id=chat_id, text=caption)
+            try: await context.bot.send_message(chat_id=chat_id, text=cap)
             except: pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -109,7 +137,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         resume_text = {"vip": "VIP Access", "signals": "Free Signals", "support": "Support", "about_academy": "About Us", "market": "Market Overview", "education": "Free Education", "live_session": "Live Trading", "ebook": "E-Book", "copytrading": "Copy Trading"}.get(last_action, last_action)
         text = f"Welcome back {name}! 👋\n\nYou left off at: *{resume_text}*\n\nWe saved your place. Continue where you left off?\n\nSelect below:"
     else:
-        text = f"Welcome {name} to Pip Hunters\n\nProfessional Forex & Gold Signals Provider\nAccuracy: 85-90% | 3-5 Signals Daily\n\nSelect an option below:"
+        text = f"Welcome {name} to Pip Hunters\n\nProfessional Forex & Gold Signals Provider\nAccuracy: 85-90% | 3-5 Signals Daily\n24/7 LIVE BOT\n\nSelect an option below:"
     await update.message.reply_text(text, reply_markup=main_menu())
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -212,6 +240,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
+    threading.Thread(target=keep_alive_ping, daemon=True).start()
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
@@ -220,7 +249,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    print("Bot V8.9 REAL CHARTS EDITION - 24/7 Keep-Alive LIVE!")
+    print("Bot V10.3 REAL CHARTS + ANTI-SLEEP 24/7 LIVE!")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
