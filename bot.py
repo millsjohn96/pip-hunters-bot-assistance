@@ -1,16 +1,8 @@
-import os
-import json
-import logging
-import threading
-import datetime
-import glob
-import time
-import requests
+import os, json, logging, threading, datetime, glob, time, requests
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-# ===== CONFIG =====
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 CHANNEL_1 = "@PipHuntersSignals1"
@@ -20,33 +12,29 @@ BACKUP_CHANNEL = "@PipHuntersSignals2"
 USERS_FILE = "users.json"
 
 logging.basicConfig(level=logging.INFO)
-
-# ===== FLASK + ANTI-SLEEP (24/7) =====
 flask_app = Flask(__name__)
+
 @flask_app.route('/')
 def home():
-    return "Pip Hunters Bot V10.5 FULL FINAL LIVE - 24/7 Anti-Sleep"
+    return "Pip Hunters V10.6 FIXED LIVE 24/7"
+
 @flask_app.route('/health')
 def health():
     return "OK", 200
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host='0.0.0.0', port=port)
+    flask_app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 def keep_alive_ping():
-    # Pings itself every 10 minutes so Render never sleeps
     while True:
         time.sleep(600)
         try:
             url = os.getenv("RENDER_EXTERNAL_URL")
             if url:
                 requests.get(url, timeout=10)
-                print("Keep alive ping sent")
         except Exception as e:
-            print(f"Ping failed: {e}")
+            print(f"Ping error {e}")
 
-# ===== USER MEMORY =====
 def load_data():
     try:
         if os.path.exists(USERS_FILE):
@@ -59,7 +47,7 @@ def load_data():
                     return new_data
                 return data
     except Exception as e:
-        print(f"Load error: {e}")
+        print(f"Load error {e}")
     return {}
 
 def save_data(data):
@@ -67,7 +55,7 @@ def save_data(data):
         with open(USERS_FILE, "w") as f:
             json.dump(data, f, indent=2)
     except Exception as e:
-        print(f"Save error: {e}")
+        print(f"Save error {e}")
 
 def update_user_memory(uid, username, firstname, action="start"):
     data = load_data()
@@ -91,7 +79,6 @@ def get_user_list():
 def get_last_action(uid):
     return load_data().get(str(uid), {}).get("last_action", "start")
 
-# ===== MENUS =====
 def main_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📈 Free Trading Signals", callback_data='signals')],
@@ -114,16 +101,14 @@ def main_menu():
 def back_menu():
     return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data='main')]])
 
-# ===== SEND REAL CHARTS - VIVID LONG =====
 async def send_real_charts(chat_id, context, include_ebook_text=False):
     captions = [
-        "📊 CHART 1: 14th October - Sweep Model A (BUY Setup)\n\nThis chart shows a classic liquidity sweep. Price first swept below 4070, taking out all early buyers stop losses. After the sweep, we saw strong bullish momentum shifting structure to the upside. The red box at 4129 was our institutional order block entry. Price then rallied aggressively to 4168 which acted as a liquidity magnet. Total move was huge. This is how Smart Money traps retail before the real move. Lesson: Never buy before sweep.",
-        "📊 CHART 2: 15th-16th October - Institutional Red Boxes (Key Levels)\n\nThis is M30 timeframe showing two powerful breaker blocks. The market has marked 4129 and 4168 as critical decision points where banks placed orders. Notice how price keeps respecting the 4168 level - it holds as support and resistance multiple times. The red boxes are not random, they are where Smart Money is waiting. When you understand these boxes, you stop chasing price and start waiting at the right zones. Patience is key.",
-        "📊 CHART 3: 9th October - Early Morning Rally (Model B)\n\nThis chart captures a beautiful 5:00 AM GMT breakout. Price was consolidating around 4145 during Asian session. Once London kill zone started, price broke structure bullish with strong displacement. The level 4168 which was previously resistance flipped to become solid support. This is what we call Model B - a Breaker Block retest. Many traders missed this because they were sleeping, but our system caught it at the exact entry. London open is powerful.",
-        "📊 CHART 4: 6th-7th October - Double Top Reversal (SELL Setup)\n\nPerfect example of a double top failure. Price made two attempts to break 4176 and failed both times, creating equal highs. This is a trap for breakout buyers. After the second rejection, price collapsed aggressively down to 4055, sweeping all weak longs. The breakdown below 4168 confirmed the shift. This chart teaches you why we never buy double tops without confirmation - we wait for the sweep first. Equal highs = liquidity.",
-        "📊 CHART 5: 16th October M15 - Intraday Holding & MSS\n\nThis is lower timeframe M15 execution chart from 13:45 to 18:45 on 16th October. After a sharp sell-off, price returned to 4168 and started holding above it. This holding behavior plus a Market Structure Shift (MSS) on M15 gave us a high-probability long entry. You can see how price respects the level for hours. This is real-time proof that institutional levels hold even on volatile days. This is exactly how we time entries."
+        "📊 CHART 1: 14th Oct - Sweep Model A (BUY)\n\nClassic liquidity sweep. Price swept below 4070 taking early buyers SL. After sweep strong bullish MSS. Red box 4129 was institutional order block entry. Rallied to 4168 liquidity magnet. This is how Smart Money traps retail before real move. Never buy before sweep.",
+        "📊 CHART 2: 15th-16th Oct - Institutional Red Boxes\n\nM30 showing two breaker blocks. Market marked 4129 and 4168 as critical decision points where banks placed orders. Price respects 4168 as support/resistance multiple times. Red boxes are where Smart Money waits. Understand boxes = stop chasing, start waiting at right zones.",
+        "📊 CHART 3: 9th Oct - Early Morning Rally Model B\n\nBeautiful 5AM GMT breakout. Consolidating 4145 Asian. London killzone broke structure bullish with displacement. 4168 resistance flipped to support. This is Model B Breaker retest. Many missed because sleeping but system caught exact entry. London open powerful.",
+        "📊 CHART 4: 6th-7th Oct - Double Top Reversal SELL\n\nDouble top failure. Two attempts to break 4176 failed equal highs = trap for breakout buyers. After second rejection collapsed to 4055 sweeping weak longs. Breakdown below 4168 confirmed shift. Teaches why we never buy double tops without confirmation - wait for sweep first.",
+        "📊 CHART 5: 16th Oct M15 - Intraday Holding & MSS\n\nM15 execution 13:45-18:45 16th Oct. After sell-off price returned to 4168 and held above. Holding + MSS M15 gave high-prob long entry. Price respects level for hours. Real proof institutional levels hold even volatile days. Exactly how we time entries."
     ]
-    # Try proper names first, then any IMG files
     proper = ["chart_5_m30_14_oct_sweep.jpg","chart_1_m30_15_16_oct_redboxes.jpg","chart_3_m30_9_oct_rally.jpg","chart_4_m30_6_7_oct_doubletop.jpg","chart_2_m15_16_oct_holding.jpg"]
     found = [f for f in proper if os.path.exists(f)]
     if len(found) < 5:
@@ -133,32 +118,24 @@ async def send_real_charts(chat_id, context, include_ebook_text=False):
             found = all_imgs[:5]
         elif all_imgs:
             found = all_imgs
-
     if include_ebook_text:
-        txt = f"📖 PIP HUNTERS E-BOOK + 5 REAL CHARTS\n\nPrice: $100 - FREE Today Only!\n\nInside You Will Learn:\n• How to Identify Institutional Order Blocks\n• The 10-Point Scoring System (7/10 Rule)\n• London & New York Kill Zones Explained\n• $100 to $1000 Growth Blueprint\n• Professional Risk Management\n• 5 REAL MT5 Chart Breakdowns With Vivid Explanation\n\n👇 Below are your 5 REAL MT5 charts with full explanation:\n\nJoin: {FREE_CHANNEL_LINK}\nAccount: {DERIV_LINK}"
+        txt = f"📖 PIP HUNTERS E-BOOK + 5 REAL CHARTS\n\nPrice: $100 - FREE Today Only!\nInside Learn: Order Blocks, 7/10 Scoring, Kill Zones, $100-$1000 Blueprint, Risk Management, 5 REAL MT5 Breakdowns\n\nBelow are 5 REAL MT5 charts:\nJoin: {FREE_CHANNEL_LINK}\nAccount: {DERIV_LINK}"
         try:
             await context.bot.send_message(chat_id=chat_id, text=txt)
-        except:
-            pass
-
+        except Exception as e:
+            print(e)
     if not found:
-        await context.bot.send_message(chat_id=chat_id, text="⚠️ Charts are uploading... please try again in 1 minute")
+        await context.bot.send_message(chat_id=chat_id, text="Charts uploading... try again 1 minute")
         return
-
     for idx, fn in enumerate(found):
         try:
-            cap = captions[idx] if idx < len(captions) else f"📊 REAL MT5 CHART {idx+1}"
+            cap = captions[idx] if idx < len(captions) else f"REAL CHART {idx+1}"
             if os.path.exists(fn):
-                with open(fn, 'rb') as photo:
-                    await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=cap)
+                with open(fn, 'rb') as ph:
+                    await context.bot.send_photo(chat_id=chat_id, photo=ph, caption=cap)
         except Exception as e:
             logging.error(f"Failed {fn}: {e}")
-            try:
-                await context.bot.send_message(chat_id=chat_id, text=captions[idx] if idx < len(captions) else "Chart")
-            except:
-                pass
 
-# ===== COMMANDS =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     user = update.effective_user
@@ -166,118 +143,145 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_returning = str(uid) in data
     last_action = get_last_action(uid) if is_returning else "start"
     update_user_memory(uid, user.username, user.first_name, "start")
-    # Notify admin
     try:
         if uid != ADMIN_ID:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🔔 {'RETURNING' if is_returning else 'NEW'} USER\nName: {user.first_name} @{user.username}\nID: {uid}\nLast: {last_action}\nTotal Users: {len(load_data())}")
-    except:
-        pass
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"NEW USER: {user.first_name} @{user.username} ID:{uid} Last:{last_action} Total:{len(load_data())}")
+    except Exception as e:
+        print(e)
     name = user.first_name or "Trader"
-    if is_returning and last_action != "start":
-        resume_map = {"vip": "VIP Access", "signals": "Free Signals", "support": "Support", "about_academy": "About Us", "market": "Market Overview", "education": "Free Education", "live_session": "Live Trading", "ebook": "E-Book", "copytrading": "Copy Trading", "autobot": "Auto Trading Bot", "faq": "FAQ", "risk": "Risk Management"}
-        resume_text = resume_map.get(last_action, last_action)
-        text = f"Welcome back {name}! 👋\n\nYou left off at: *{resume_text}*\n\nWe saved your place. Continue where you left off?\n\nSelect below:"
-    else:
-        text = f"Welcome {name} to Pip Hunters\n\nProfessional Forex & Synthetic Indices Signals Provider\nAccuracy: 85-90% | 3-5 Signals Daily\n\nSelect an option below:"
+    text = f"Welcome {name} to Pip Hunters\n\nProfessional Forex & Synthetic Indices Signals Provider\nAccuracy: 85-90% | 3-5 Signals Daily\n\nSelect option:"
     await update.message.reply_text(text, reply_markup=main_menu())
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🆘 Help: /start for menu\nSupport: @PipHuntersSignals2", reply_markup=main_menu())
+    await update.message.reply_text("Help: /start for menu", reply_markup=main_menu())
 
-# ===== BUTTON HANDLER - ALL RESPONSES =====
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
     uid = query.from_user.id
     update_user_memory(uid, query.from_user.username, query.from_user.first_name, data)
-    # Notify admin of click
     try:
         if uid != ADMIN_ID:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"💬 CLICK: {data}\nFrom: {query.from_user.first_name} @{query.from_user.username} ({uid})")
-    except:
-        pass
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"CLICK: {data} From: {query.from_user.first_name} @{query.from_user.username} ({uid})")
+    except Exception as e:
+        print(e)
 
     if data in ['main', 'welcome']:
-        await query.message.reply_text("📋 Main Menu - Select an option:", reply_markup=main_menu())
-
+        await query.message.reply_text("Main Menu:", reply_markup=main_menu())
     elif data == 'signals':
-        await query.message.reply_text(
-            f"📈 Free Trading Signals\n\nAll our free signals are posted live in our official channel:\n{FREE_CHANNEL_LINK}\n\nWhat you get:\n• 3-5 high-quality signals daily\n• XAUUSD, Major Forex Pairs & Synthetic Indices\n• Clear Entry, Stop Loss and Take Profit\n• Proper risk to reward\n\nMake sure to enable notifications so you don't miss any signal.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text(f"Free Trading Signals\n\nAll signals in official channel:\n{FREE_CHANNEL_LINK}\n\n- 3-5 high-quality signals daily\n- XAUUSD, Forex & Synthetic Indices\n- Clear Entry, SL and TP", reply_markup=back_menu())
     elif data == 'about_academy':
-        await query.message.reply_text(
-            f"🎓 About Pip Hunters\n\nProfessional trading community established in 2020\n\nWe are specialized in:\n• Smart Money Concept (SMC)\n• Price Action & Liquidity Concepts\n• Technical Analysis & Market Structure\n• Forex & Synthetic Indices\n• Risk Management & Trading Psychology\n• Boom & Crash & Volatility Indices Mastery\n\nWe don't just trade Forex, we trade both Forex and Synthetic Indices with professional institutional approach.\n\nOur Mission: To help traders become consistently profitable with proper education and discipline.\n\nOfficial Channel:\n{FREE_CHANNEL_LINK}\n\n© 2026 Pip Hunters",
-            reply_markup=back_menu())
-
+        await query.message.reply_text(f"About Pip Hunters\n\nProfessional trading community established in 2020\n\nSpecialized in:\n- SMC\n- Price Action & Liquidity\n- Technical Analysis & Market Structure\n- Forex & Synthetic Indices\n- Risk Management & Psychology\n- Boom & Crash & Volatility Mastery\n\nWe trade both Forex and Synthetic with institutional approach.\n\nChannel:\n{FREE_CHANNEL_LINK}\n\n2026 Pip Hunters", reply_markup=back_menu())
     elif data == 'education':
-        await query.message.reply_text(
-            "📚 Free Education Hub\n\nBeginner Modules:\n1. Understanding Market Structure\n2. Support & Resistance Mastery\n3. Risk Management Basics\n4. Introduction to Smart Money Concept\n5. Synthetic Indices Basics\n\nAdvanced modules are available for our community members.\n\nWe post daily lessons and chart breakdowns in our channel.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text("Free Education Hub\n\n1 Market Structure\n2 Support & Resistance\n3 Risk Management\n4 Intro to SMC\n5 Synthetic Basics", reply_markup=back_menu())
     elif data == 'support':
-        kb = [[InlineKeyboardButton("💬 Contact Support", url=f"https://t.me/{BACKUP_CHANNEL.replace('@','')}")],[InlineKeyboardButton("⬅️ Back", callback_data='main')]]
-        await query.message.reply_text(
-            "🆘 Support Center\n\nOur support team is available 24/5 (Monday to Friday)\n\nResponse time: 5-15 minutes\n\nClick below to contact us directly on Telegram.",
-            reply_markup=InlineKeyboardMarkup(kb))
-
+        kb = [[InlineKeyboardButton("Contact Support", url=f"https://t.me/{BACKUP_CHANNEL.replace('@','')}")],[InlineKeyboardButton("Back", callback_data='main')]]
+        await query.message.reply_text("Support Center 24/5 Mon-Fri Response 5-15 mins", reply_markup=InlineKeyboardMarkup(kb))
     elif data == 'market':
-        await query.message.reply_text(
-            f"📊 Market Overview\n\nDaily Market Analysis Schedule (GMT):\n• 09:00 - London Session Open\n• 12:00 - Midday Market Update\n• 16:00 - New York Session\n\nAll detailed analysis is posted in our main channel:\n{FREE_CHANNEL_LINK}",
-            reply_markup=back_menu())
-
+        await query.message.reply_text(f"Market Overview\n\nSchedule GMT:\n- 09:00 London Open\n- 12:00 Midday\n- 16:00 NY\n\nAll in:\n{FREE_CHANNEL_LINK}", reply_markup=back_menu())
     elif data == 'vip':
-        kb = [[InlineKeyboardButton("1️⃣ Register Account", url=DERIV_LINK)],[InlineKeyboardButton("2️⃣ Verify Registration", callback_data='verify')],[InlineKeyboardButton("⬅️ Back", callback_data='main')]]
-        await query.message.reply_text(
-            "💎 VIP Access - FREE Membership\n\nVIP Benefits:\n• 5-7 Premium Signals Daily\n• Higher Accuracy & Better Risk to Reward\n• Live Trading Sessions (Coming Soon)\n• Private Education & Mentorship\n• Priority Support\n\nHow to join for FREE:\n1. Create account via button below\n2. Send screenshot of your dashboard HERE (to this bot)\n3. Get activated within 10 minutes",
-            reply_markup=InlineKeyboardMarkup(kb))
-
+        kb = [[InlineKeyboardButton("1 Register Account", url=DERIV_LINK)],[InlineKeyboardButton("2 Verify Registration", callback_data='verify')],[InlineKeyboardButton("Back", callback_data='main')]]
+        await query.message.reply_text("VIP Access FREE\n\n- 5-7 Premium Signals Daily\n- Higher Accuracy & Better R:R\n- Live Trading (Coming Soon)\n- Private Education\n- Priority Support\n\nHow to join FREE:\n1 Create account\n2 Send screenshot HERE\n3 Activated 10 mins", reply_markup=InlineKeyboardMarkup(kb))
     elif data == 'live_session':
-        await query.message.reply_text(
-            f"📹 Live Trading Sessions\n\nWe are preparing to launch our live trading sessions where we break down the market in real-time and answer questions.\n\nProposed Schedule:\n• Tuesdays: 20:00 GMT\n• Thursdays: 20:00 GMT\n\nAll live announcements will be made in our main channel:\n{FREE_CHANNEL_LINK}",
-            reply_markup=back_menu())
-
+        await query.message.reply_text(f"Live Trading Sessions\n\nPreparing to launch live sessions breakdown real-time.\n\nTuesdays 20:00 GMT\nThursdays 20:00 GMT\n\nAnnouncements in:\n{FREE_CHANNEL_LINK}", reply_markup=back_menu())
     elif data == 'ebook':
-        await query.message.reply_text("📖 Preparing your E-Book with 5 REAL MT5 Charts...\n\nPlease wait, sending charts now... ⏳", reply_markup=back_menu())
+        await query.message.reply_text("Preparing E-Book with 5 REAL MT5 Charts... wait...", reply_markup=back_menu())
         await send_real_charts(query.message.chat_id, context, include_ebook_text=True)
-        await query.message.reply_text(f"✅ E-Book + 5 REAL Charts Sent!\n\nAll charts are REAL from MT5, not drawings\nValue $100 - FREE today\n\nJoin: {FREE_CHANNEL_LINK}", reply_markup=back_menu())
-
+        await query.message.reply_text(f"E-Book + 5 REAL Charts Sent! FREE today Join: {FREE_CHANNEL_LINK}", reply_markup=back_menu())
     elif data == 'copytrading':
-        await query.message.reply_text(
-            "👥 Copy Trading Service\n\nWe are working on launching our professional copy trading service.\n\nPlanned Features:\n• Minimum Capital: $100\n• Fully Automated Copying\n• Full Transparency & Trade History\n• Professional Risk Management\n• Suitable for Forex & Synthetic Indices\n\nThis service is not live yet. We are finalizing the system to ensure safety and profitability.\n\nStay tuned in our main channel for official launch announcement.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text("Copy Trading Service\n\nWorking on launching professional copy trading.\n\nPlanned: Min $100, Fully Automated, Transparency, Risk Management, Forex & Synthetic.\n\nNot live yet finalizing system for safety. Stay tuned for launch.", reply_markup=back_menu())
     elif data == 'autobot':
-        await query.message.reply_text(
-            "🤖 Auto Trading Bot\n\nWe are currently developing our Gold (XAUUSD) and Synthetic Indices Auto Trading Bot.\n\nFeatures Under Development:\n• 24/5 Automated Trading\n• Tested Institutional Strategy\n• Works on VPS for uninterrupted execution\n• Built-in Risk Management\n\nThis bot is not available for public yet. We are in testing phase.\n\nContact support for early access list.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text("Auto Trading Bot\n\nDeveloping Gold XAUUSD and Synthetic Bot.\n\nFeatures: 24/5 Automated, Tested Institutional Strategy, VPS, Risk Management\n\nNot available public yet testing phase. Contact support early access.", reply_markup=back_menu())
     elif data == 'calendar':
-        await query.message.reply_text(
-            "🗓️ Economic Calendar\n\nAlways check high-impact news before trading:\n• Visit ForexFactory.com for full calendar\n• Avoid trading 15 minutes before and after RED folder news\n\nWe post daily news reminders in our channel to help you avoid risky times.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text("Economic Calendar\nCheck ForexFactory.com Avoid 15 mins before after RED news", reply_markup=back_menu())
     elif data == 'faq':
-        await query.message.reply_text(
-            "❓ Frequently Asked Questions (FAQ)\n\n1️⃣ Are your signals free?\nYes, we provide 3-5 free signals daily in our public Telegram channel. VIP members get additional premium signals.\n\n2️⃣ What is your accuracy rate?\nOur historical accuracy is between 85-90% when traders follow our risk management rules properly. We focus on quality over quantity.\n\n3️⃣ Which markets do you trade?\nWe trade Major Forex Pairs (EURUSD, GBPUSD, XAUUSD) and Synthetic Indices (Volatility Indices, Boom & Crash). Both markets are covered.\n\n4️⃣ Which broker do you recommend?\nWe recommend Deriv for both Forex and Synthetic Indices because of fast execution, low spreads and reliability. Use our official link for full support.\n\n5️⃣ How much do I need to start?\nYou can start with as low as $50-$100, but we recommend $100+ for proper risk management. The key is to risk only 1-2% per trade.\n\n6️⃣ Is VIP really free?\nYes, VIP access is completely free. You just need to create your trading account using our official partner link and send us a screenshot for verification.\n\n7️⃣ Do you offer mentorship or education?\nYes, we provide free education in our channel and detailed private mentorship for our community members. We cover SMC, Price Action and Trading Psychology.\n\n8️⃣ How can I contact support?\nClick the Support button in the menu to chat directly with our team on Telegram. We respond within 5-15 minutes during weekdays.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text("FAQ 8 Questions\n\n1 Free? Yes 3-5 daily public channel VIP extra.\n\n2 Accuracy? 85-90% when risk rules followed.\n\n3 Markets? Forex Majors + XAUUSD + Synthetic Volatility Boom Crash.\n\n4 Broker? Deriv fast execution low spreads official link.\n\n5 How much start? $50-$100, recommend $100+ risk 1-2% per trade.\n\n6 VIP free? Yes free create account partner link send screenshot verification.\n\n7 Mentorship? Yes free education channel private mentorship SMC Price Action Psychology.\n\n8 Contact support? Support button menu Telegram 5-15 mins weekdays.", reply_markup=back_menu())
     elif data == 'risk':
-        await query.message.reply_text(
-            "🛡️ Risk Management\n\nGolden Rules for Long-Term Profitability:\n\n• Risk only 1-2% of your account per trade - This is the most important rule\n• Always use a Stop Loss - Never trade without it\n• Don't overtrade - Quality over quantity\n• Follow minimum 1:2 Risk to Reward ratio\n• Trade with caution and discipline - Avoid emotional decisions\n• Take breaks after 2 losses in a row\n\nRemember: Protecting your capital is more important than making profit. This is not financial advice, trade at your own risk.",
-            reply_markup=back_menu())
-
+        await query.message.reply_text("Risk Management\n\nGolden Rules:\n- Risk only 1-2% per trade most important\n- Always Stop Loss\n- Don't overtrade\n- Minimum 1:2 R:R\n- Trade with caution discipline\n- Breaks after 2 losses\n\nProtecting capital > making profit. Not financial advice.", reply_markup=back_menu())
     elif data == 'verify':
-        await query.message.reply_text(
-            f"✅ Verification Steps\n\n1. Register here: {DERIV_LINK}\n2. Take screenshot of your Deriv dashboard (show your name/ID)\n3. SEND THAT SCREENSHOT HERE as photo to this bot\n\nOur team verifies manually in 10 mins.",
-            reply_markup=back_menu())
-
-    # ===== ADMIN APPROVE / REJECT - THIS IS THE IMPORTANT PART YOU ASKED =====
+        await query.message.reply_text(f"Verification Steps\n\n1 Register: {DERIV_LINK}\n2 Screenshot Deriv dashboard\n3 SEND HERE as photo\n\nVerify 10 mins.", reply_markup=back_menu())
     elif data.startswith("approve_"):
         target_id = int(data.split("_")[1])
         try:
-            await context.bot.send_message(chat_id=target_id, text="✅ Congratulations! You are VERIFIED!\n\n🎉 VIP Access Activated!\n\nYour E-Book and VIP channel access will be sent shortly.\n\nWelcome to Pip Hunters VIP!")
-            await query.message.reply_text(f"✅ Approved user {target_id} - VIP activated!")
+            await context.bot.send_message(chat_id=target_id, text="Congratulations! VERIFIED! VIP Activated! Welcome to Pip Hunters VIP!")
+            await query.message.reply_text(f"Approved {target_id}")
         except Exception as e:
-            
+            await query.message.reply_text(f"Failed {e}")
+    elif data.startswith("reject_"):
+        target_id = int(data.split("_")[1])
+        try:
+            await context.bot.send_message(chat_id=target_id, text=f"Verification Failed. Ensure registered via link {DERIV_LINK} and screenshot shows dashboard clearly.")
+            await query.message.reply_text(f"Rejected {target_id}")
+        except Exception as e:
+            await query.message.reply_text(f"Failed {e}")
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    user = update.effective_user
+    update_user_memory(uid, user.username, user.first_name, "photo_verification")
+    try:
+        caption = f"NEW VERIFICATION From: {user.first_name} @{user.username} ID:{uid} Last:{get_last_action(uid)}"
+        keyboard = [[InlineKeyboardButton("Approve VIP", callback_data=f"approve_{uid}"), InlineKeyboardButton("Reject", callback_data=f"reject_{uid}")]]
+        await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, caption=caption, reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.forward(chat_id=ADMIN_ID)
+    except Exception as e:
+        print(e)
+    await update.message.reply_text("Screenshot Received! Checking... confirmed within 10 mins.", reply_markup=back_menu())
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    text = update.message.text
+    if text.startswith("/"):
+        return
+    update_user_memory(uid, update.effective_user.username, update.effective_user.first_name, f"text: {text[:30]}")
+    try:
+        if uid != ADMIN_ID:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"MESSAGE From: {update.effective_user.first_name} @{update.effective_user.username} ({uid}) Msg: {text} Reply: /reply {uid} msg")
+    except Exception as e:
+        print(e)
+    await update.message.reply_text("Thanks! Team will reply soon.", reply_markup=main_menu())
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Only admin.")
+        return
+    if not context.args:
+        await update.message.reply_text("Usage: /broadcast msg OR /reply USER_ID msg")
+        return
+    if context.args[0].isdigit() and update.message.text.startswith("/reply"):
+        target_id = int(context.args[0])
+        msg = " ".join(context.args[1:])
+        try:
+            await context.bot.send_message(chat_id=target_id, text=f"Support: {msg}")
+            await update.message.reply_text(f"Replied to {target_id}")
+        except Exception as e:
+            await update.message.reply_text(f"Failed: {e}")
+        return
+    msg = " ".join(context.args)
+    users = get_user_list()
+    count = 0
+    for uid in users:
+        try:
+            await context.bot.send_message(chat_id=uid, text=msg, parse_mode="HTML")
+            count += 1
+        except Exception as e:
+            print(e)
+    await update.message.reply_text(f"Sent to {count} users")
+
+def main():
+    threading.Thread(target=run_flask, daemon=True).start()
+    threading.Thread(target=keep_alive_ping, daemon=True).start()
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("reply", broadcast))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    print("Bot V10.6 FIXED LIVE!")
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
