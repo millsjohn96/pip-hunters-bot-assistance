@@ -1,287 +1,286 @@
-import os, json, logging, threading, datetime, glob, time, requests
+import os, json, threading, requests, time
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-CHANNEL_1 = "@PipHuntersSignals1"
-FREE_CHANNEL_LINK = "https://t.me/PipHuntersSignals1"
-DERIV_LINK = "https://t.deriv.link?t=N886WMZM3C76"
-BACKUP_CHANNEL = "@PipHuntersSignals2"
-USERS_FILE = "users.json"
+TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+CHANNEL = "@PipHuntersSignals1"
+CHANNEL_LINK = "https://t.me/PipHuntersSignals1"
+VERIFY_GROUP_ID = os.environ.get("VERIFY_GROUP_ID", "") # e.g. -1001234567890 - Your proofs group
+TRUSTED_BROKER_LINK = "https://t.deriv.link?t=N886WMZM3C76"
+EBOOK_LINK = "https://pip-hunters-bot.onrender.com/ebook"
 
-logging.basicConfig(level=logging.INFO)
-flask_app = Flask(__name__)
+user_state = {}
+if os.path.exists("user_state.json"):
+    try: user_state = json.load(open("user_state.json"))
+    except: user_state = {}
 
-@flask_app.route('/')
-def home():
-    return "Pip Hunters V10.6 FIXED LIVE 24/7"
+pending_signal = {} # For admin approval flow
 
-@flask_app.route('/health')
-def health():
-    return "OK", 200
+def save_state():
+    try: json.dump(user_state, open("user_state.json", "w"))
+    except: pass
 
-def run_flask():
-    flask_app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+def set_state(uid, where):
+    user_state.setdefault(str(uid), {})["last"] = where
+    user_state[str(uid)]["time"] = time.time()
+    save_state()
 
-def keep_alive_ping():
-    while True:
-        time.sleep(600)
-        try:
-            url = os.getenv("RENDER_EXTERNAL_URL")
-            if url:
-                requests.get(url, timeout=10)
-        except Exception as e:
-            print(f"Ping error {e}")
+def get_state(uid):
+    return user_state.get(str(uid), {}).get("last", "Main Menu")
 
-def load_data():
+def set_awaiting(uid, mode):
+    user_state.setdefault(str(uid), {})["awaiting"] = mode
+    save_state()
+
+def get_awaiting(uid):
+    return user_state.get(str(uid), {}).get("awaiting", None)
+
+def get_gold_price():
     try:
-        if os.path.exists(USERS_FILE):
-            with open(USERS_FILE, "r") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    new_data = {}
-                    for uid in data:
-                        new_data[str(uid)] = {"id": uid, "last_action": "start", "last_seen": str(datetime.datetime.now()), "visits": 1}
-                    return new_data
-                return data
-    except Exception as e:
-        print(f"Load error {e}")
-    return {}
+        r = requests.get("https://api.gold-api.com/price/XAU", timeout=5).json()
+        return float(r.get("price", 4145.2))
+    except: return 4145.20
 
-def save_data(data):
-    try:
-        with open(USERS_FILE, "w") as f:
-            json.dump(data, f, indent=2)
-    except Exception as e:
-        print(f"Save error {e}")
+def build_signal(symbol, side, entry=None):
+    price = get_gold_price() if not entry else float(entry)
+    sl = price - 60 if side == "BUY" else price + 60
+    tp1 = price + 40 if side == "BUY" else price - 40
+    tp2 = price + 80 if side == "BUY" else price - 80
+    tp3 = price + 120 if side == "BUY" else price - 120
+    msg = f"""🚀 PIP HUNTERS FREE SIGNAL | V11
+━━━━━━━━━━━━━━━
+📊 {symbol} | {side} | SMC MODEL A
+💰 Live: {price:.2f}
 
-def update_user_memory(uid, username, firstname, action="start"):
-    data = load_data()
-    uid_str = str(uid)
-    now = str(datetime.datetime.now())
-    if uid_str not in data:
-        data[uid_str] = {"id": uid, "username": username, "name": firstname, "last_action": action, "last_seen": now, "visits": 1, "joined": now}
-    else:
-        data[uid_str]["last_action"] = action
-        data[uid_str]["last_seen"] = now
-        data[uid_str]["visits"] = data[uid_str].get("visits", 0) + 1
-        data[uid_str]["username"] = username
-        data[uid_str]["name"] = firstname
-    save_data(data)
-    return data.get(uid_str)
+📍 Entry: {price:.2f}
+🛑 SL: {sl:.2f}
+✅ TP1: {tp1:.2f}
+✅ TP2: {tp2:.2f}
+✅ TP3: {tp3:.2f}
 
-def get_user_list():
-    data = load_data()
-    return [v["id"] for v in data.values() if "id" in v]
+📖 Story: OB 4129 + Sweep 4070 holding ✅
+🔗 Broker: {TRUSTED_BROKER_LINK}
+📢 {CHANNEL_LINK}
+#XAUUSD #SMC"""
+    return msg
 
-def get_last_action(uid):
-    return load_data().get(str(uid), {}).get("last_action", "start")
-
-def main_menu():
+def main_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📈 Free Trading Signals", callback_data='signals')],
-        [InlineKeyboardButton("🚀 Join Free Channel", url=FREE_CHANNEL_LINK)],
-        [InlineKeyboardButton("🎓 About Us", callback_data='about_academy')],
-        [InlineKeyboardButton("📚 Free Education", callback_data='education')],
-        [InlineKeyboardButton("🏦 Create Trading Account", url=DERIV_LINK)],
-        [InlineKeyboardButton("🆘 Support", callback_data='support')],
-        [InlineKeyboardButton("📊 Market Overview", callback_data='market')],
-        [InlineKeyboardButton("💎 VIP Access", callback_data='vip')],
-        [InlineKeyboardButton("📹 Live Trading", callback_data='live_session')],
-        [InlineKeyboardButton("📖 Trading E-Book (5 REAL Charts)", callback_data='ebook')],
-        [InlineKeyboardButton("👥 Copy Trading", callback_data='copytrading')],
-        [InlineKeyboardButton("🤖 Auto Trading Bot", callback_data='autobot')],
-        [InlineKeyboardButton("🗓️ Economic Calendar", callback_data='calendar')],
-        [InlineKeyboardButton("❓ FAQ", callback_data='faq')],
-        [InlineKeyboardButton("🛡️ Risk Management", callback_data='risk')],
+        [InlineKeyboardButton("🚀 Free Trading Signals", callback_data="free")],
+        [InlineKeyboardButton("📖 Trading E-Book (5 REAL Charts)", callback_data="ebook")],
+        [InlineKeyboardButton("💹 Live Trading Sessions", callback_data="live")],
+        [InlineKeyboardButton("🔗 Create Trading Account - Deriv", callback_data="verify")],
+        [InlineKeyboardButton("ℹ️ About Us - Free Education", callback_data="about")],
+        [InlineKeyboardButton("💬 Support", callback_data="support")]
     ])
 
-def back_menu():
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back to Main Menu", callback_data='main')]])
+def admin_kb(price):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"💰 Live XAU: {price:.2f}", callback_data="noop")],
+        [InlineKeyboardButton("🚀 Preview XAU BUY", callback_data="ap_XAUUSD_BUY"), InlineKeyboardButton("🔻 Preview XAU SELL", callback_data="ap_XAUUSD_SELL")],
+        [InlineKeyboardButton("🔙 Main Menu", callback_data="main")]
+    ])
 
-async def send_real_charts(chat_id, context, include_ebook_text=False):
-    captions = [
-        "📊 CHART 1: 14th Oct - Sweep Model A (BUY)\n\nClassic liquidity sweep. Price swept below 4070 taking early buyers SL. After sweep strong bullish MSS. Red box 4129 was institutional order block entry. Rallied to 4168 liquidity magnet. This is how Smart Money traps retail before real move. Never buy before sweep.",
-        "📊 CHART 2: 15th-16th Oct - Institutional Red Boxes\n\nM30 showing two breaker blocks. Market marked 4129 and 4168 as critical decision points where banks placed orders. Price respects 4168 as support/resistance multiple times. Red boxes are where Smart Money waits. Understand boxes = stop chasing, start waiting at right zones.",
-        "📊 CHART 3: 9th Oct - Early Morning Rally Model B\n\nBeautiful 5AM GMT breakout. Consolidating 4145 Asian. London killzone broke structure bullish with displacement. 4168 resistance flipped to support. This is Model B Breaker retest. Many missed because sleeping but system caught exact entry. London open powerful.",
-        "📊 CHART 4: 6th-7th Oct - Double Top Reversal SELL\n\nDouble top failure. Two attempts to break 4176 failed equal highs = trap for breakout buyers. After second rejection collapsed to 4055 sweeping weak longs. Breakdown below 4168 confirmed shift. Teaches why we never buy double tops without confirmation - wait for sweep first.",
-        "📊 CHART 5: 16th Oct M15 - Intraday Holding & MSS\n\nM15 execution 13:45-18:45 16th Oct. After sell-off price returned to 4168 and held above. Holding + MSS M15 gave high-prob long entry. Price respects level for hours. Real proof institutional levels hold even volatile days. Exactly how we time entries."
-    ]
-    proper = ["chart_5_m30_14_oct_sweep.jpg","chart_1_m30_15_16_oct_redboxes.jpg","chart_3_m30_9_oct_rally.jpg","chart_4_m30_6_7_oct_doubletop.jpg","chart_2_m15_16_oct_holding.jpg"]
-    found = [f for f in proper if os.path.exists(f)]
-    if len(found) < 5:
-        all_imgs = glob.glob("*.jpg") + glob.glob("*.JPG") + glob.glob("*.jpeg") + glob.glob("*.png") + glob.glob("IMG-*") + glob.glob("*.PNG")
-        all_imgs = sorted(list(set(all_imgs)))
-        if len(all_imgs) >= 5:
-            found = all_imgs[:5]
-        elif all_imgs:
-            found = all_imgs
-    if include_ebook_text:
-        txt = f"📖 PIP HUNTERS E-BOOK + 5 REAL CHARTS\n\nPrice: $100 - FREE Today Only!\nInside Learn: Order Blocks, 7/10 Scoring, Kill Zones, $100-$1000 Blueprint, Risk Management, 5 REAL MT5 Breakdowns\n\nBelow are 5 REAL MT5 charts:\nJoin: {FREE_CHANNEL_LINK}\nAccount: {DERIV_LINK}"
-        try:
-            await context.bot.send_message(chat_id=chat_id, text=txt)
-        except Exception as e:
-            print(e)
-    if not found:
-        await context.bot.send_message(chat_id=chat_id, text="Charts uploading... try again 1 minute")
-        return
-    for idx, fn in enumerate(found):
-        try:
-            cap = captions[idx] if idx < len(captions) else f"REAL CHART {idx+1}"
-            if os.path.exists(fn):
-                with open(fn, 'rb') as ph:
-                    await context.bot.send_photo(chat_id=chat_id, photo=ph, caption=cap)
-        except Exception as e:
-            logging.error(f"Failed {fn}: {e}")
+def approval_kb(symbol, side, entry):
+    e_str = str(entry) if entry else "auto"
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ YES, POST NOW TO CHANNEL", callback_data=f"approve_{symbol}_{side}_{e_str}")],
+        [InlineKeyboardButton("✏️ Edit Price", callback_data=f"edit_{symbol}_{side}"), InlineKeyboardButton("❌ Cancel", callback_data="admin_panel")]
+    ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    user = update.effective_user
-    data = load_data()
-    is_returning = str(uid) in data
-    last_action = get_last_action(uid) if is_returning else "start"
-    update_user_memory(uid, user.username, user.first_name, "start")
-    try:
-        if uid != ADMIN_ID:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"NEW USER: {user.first_name} @{user.username} ID:{uid} Last:{last_action} Total:{len(load_data())}")
-    except Exception as e:
-        print(e)
-    name = user.first_name or "Trader"
-    text = f"Welcome {name} to Pip Hunters\n\nProfessional Forex & Synthetic Indices Signals Provider\nAccuracy: 85-90% | 3-5 Signals Daily\n\nSelect option:"
-    await update.message.reply_text(text, reply_markup=main_menu())
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Help: /start for menu", reply_markup=main_menu())
+    last = get_state(uid)
+    wb = f"\n\n👋 Welcome back Boss! You were at: {last}" if str(uid) in user_state and last != "Main Menu" else ""
+    text = f"🔥 Welcome to PIP HUNTERS Boss!{wb}\n\n💰 We turn 4129 & 4168 into $$$\n👇 Choose (Only 6 buttons):"
+    set_state(uid, "Main Menu")
+    set_awaiting(uid, None)
+    if update.callback_query: await update.callback_query.edit_message_text(text, reply_markup=main_kb())
+    else: await update.message.reply_text(text, reply_markup=main_kb())
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    uid = query.from_user.id
-    update_user_memory(uid, query.from_user.username, query.from_user.first_name, data)
-    try:
-        if uid != ADMIN_ID:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"CLICK: {data} From: {query.from_user.first_name} @{query.from_user.username} ({uid})")
-    except Exception as e:
-        print(e)
+    q = update.callback_query; await q.answer(); uid = q.from_user.id; d = q.data
+    
+    # ADMIN ONLY CHECK FOR ADMIN PANELS
+    is_admin_action = d.startswith("ap_") or d.startswith("approve_") or d.startswith("edit_") or d == "admin_panel" or d == "noop"
+    if is_admin_action:
+        if ADMIN_ID != 0 and uid != ADMIN_ID:
+            await q.edit_message_text("❌ This admin panel appears ONLY to admin! You are not admin Boss!")
+            return
 
-    if data in ['main', 'welcome']:
-        await query.message.reply_text("Main Menu:", reply_markup=main_menu())
-    elif data == 'signals':
-        await query.message.reply_text(f"Free Trading Signals\n\nAll signals in official channel:\n{FREE_CHANNEL_LINK}\n\n- 3-5 high-quality signals daily\n- XAUUSD, Forex & Synthetic Indices\n- Clear Entry, SL and TP", reply_markup=back_menu())
-    elif data == 'about_academy':
-        await query.message.reply_text(f"About Pip Hunters\n\nProfessional trading community established in 2020\n\nSpecialized in:\n- SMC\n- Price Action & Liquidity\n- Technical Analysis & Market Structure\n- Forex & Synthetic Indices\n- Risk Management & Psychology\n- Boom & Crash & Volatility Mastery\n\nWe trade both Forex and Synthetic with institutional approach.\n\nChannel:\n{FREE_CHANNEL_LINK}\n\n2026 Pip Hunters", reply_markup=back_menu())
-    elif data == 'education':
-        await query.message.reply_text("Free Education Hub\n\n1 Market Structure\n2 Support & Resistance\n3 Risk Management\n4 Intro to SMC\n5 Synthetic Basics", reply_markup=back_menu())
-    elif data == 'support':
-        kb = [[InlineKeyboardButton("Contact Support", url=f"https://t.me/{BACKUP_CHANNEL.replace('@','')}")],[InlineKeyboardButton("Back", callback_data='main')]]
-        await query.message.reply_text("Support Center 24/5 Mon-Fri Response 5-15 mins", reply_markup=InlineKeyboardMarkup(kb))
-    elif data == 'market':
-        await query.message.reply_text(f"Market Overview\n\nSchedule GMT:\n- 09:00 London Open\n- 12:00 Midday\n- 16:00 NY\n\nAll in:\n{FREE_CHANNEL_LINK}", reply_markup=back_menu())
-    elif data == 'vip':
-        kb = [[InlineKeyboardButton("1 Register Account", url=DERIV_LINK)],[InlineKeyboardButton("2 Verify Registration", callback_data='verify')],[InlineKeyboardButton("Back", callback_data='main')]]
-        await query.message.reply_text("VIP Access FREE\n\n- 5-7 Premium Signals Daily\n- Higher Accuracy & Better R:R\n- Live Trading (Coming Soon)\n- Private Education\n- Priority Support\n\nHow to join FREE:\n1 Create account\n2 Send screenshot HERE\n3 Activated 10 mins", reply_markup=InlineKeyboardMarkup(kb))
-    elif data == 'live_session':
-        await query.message.reply_text(f"Live Trading Sessions\n\nPreparing to launch live sessions breakdown real-time.\n\nTuesdays 20:00 GMT\nThursdays 20:00 GMT\n\nAnnouncements in:\n{FREE_CHANNEL_LINK}", reply_markup=back_menu())
-    elif data == 'ebook':
-        await query.message.reply_text("Preparing E-Book with 5 REAL MT5 Charts... wait...", reply_markup=back_menu())
-        await send_real_charts(query.message.chat_id, context, include_ebook_text=True)
-        await query.message.reply_text(f"E-Book + 5 REAL Charts Sent! FREE today Join: {FREE_CHANNEL_LINK}", reply_markup=back_menu())
-    elif data == 'copytrading':
-        await query.message.reply_text("Copy Trading Service\n\nWorking on launching professional copy trading.\n\nPlanned: Min $100, Fully Automated, Transparency, Risk Management, Forex & Synthetic.\n\nNot live yet finalizing system for safety. Stay tuned for launch.", reply_markup=back_menu())
-    elif data == 'autobot':
-        await query.message.reply_text("Auto Trading Bot\n\nDeveloping Gold XAUUSD and Synthetic Bot.\n\nFeatures: 24/5 Automated, Tested Institutional Strategy, VPS, Risk Management\n\nNot available public yet testing phase. Contact support early access.", reply_markup=back_menu())
-    elif data == 'calendar':
-        await query.message.reply_text("Economic Calendar\nCheck ForexFactory.com Avoid 15 mins before after RED news", reply_markup=back_menu())
-    elif data == 'faq':
-        await query.message.reply_text("FAQ 8 Questions\n\n1 Free? Yes 3-5 daily public channel VIP extra.\n\n2 Accuracy? 85-90% when risk rules followed.\n\n3 Markets? Forex Majors + XAUUSD + Synthetic Volatility Boom Crash.\n\n4 Broker? Deriv fast execution low spreads official link.\n\n5 How much start? $50-$100, recommend $100+ risk 1-2% per trade.\n\n6 VIP free? Yes free create account partner link send screenshot verification.\n\n7 Mentorship? Yes free education channel private mentorship SMC Price Action Psychology.\n\n8 Contact support? Support button menu Telegram 5-15 mins weekdays.", reply_markup=back_menu())
-    elif data == 'risk':
-        await query.message.reply_text("Risk Management\n\nGolden Rules:\n- Risk only 1-2% per trade most important\n- Always Stop Loss\n- Don't overtrade\n- Minimum 1:2 R:R\n- Trade with caution discipline\n- Breaks after 2 losses\n\nProtecting capital > making profit. Not financial advice.", reply_markup=back_menu())
-    elif data == 'verify':
-        await query.message.reply_text(f"Verification Steps\n\n1 Register: {DERIV_LINK}\n2 Screenshot Deriv dashboard\n3 SEND HERE as photo\n\nVerify 10 mins.", reply_markup=back_menu())
-    elif data.startswith("approve_"):
-        target_id = int(data.split("_")[1])
-        try:
-            await context.bot.send_message(chat_id=target_id, text="Congratulations! VERIFIED! VIP Activated! Welcome to Pip Hunters VIP!")
-            await query.message.reply_text(f"Approved {target_id}")
-        except Exception as e:
-            await query.message.reply_text(f"Failed {e}")
-    elif data.startswith("reject_"):
-        target_id = int(data.split("_")[1])
-        try:
-            await context.bot.send_message(chat_id=target_id, text=f"Verification Failed. Ensure registered via link {DERIV_LINK} and screenshot shows dashboard clearly.")
-            await query.message.reply_text(f"Rejected {target_id}")
-        except Exception as e:
-            await query.message.reply_text(f"Failed {e}")
+    if d == "main": await start(update, context); return
+    if d == "noop": return
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if d == "ebook":
+        set_state(uid, "E-Book Page")
+        txt = "📖 PIP HUNTERS E-BOOK FREE ($100 Value)\n\n✅ Order Block 4129\n✅ Liquidity Sweep 4070\n✅ Double Top 4176\n✅ 5 REAL CHARTS inside\n\n💡 TIP: Create Deriv account with our link to unlock E-Book instantly + Bonuses!"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Create Account to Unlock E-Book", callback_data="verify")],[InlineKeyboardButton("📥 I Already Created - Get E-Book", callback_data="created_account")],[InlineKeyboardButton("🔙 Main Menu", callback_data="main")]])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d == "free":
+        set_state(uid, "Free Signals Page")
+        txt = f"🚀 FREE SIGNALS CHANNEL\n\n📢 {CHANNEL}\nDaily 1-2 FREE XAUUSD signals\n\nJoin now Boss!"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Join FREE Channel", url=CHANNEL_LINK)],[InlineKeyboardButton("🔙 Main", callback_data="main")]])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d == "live":
+        set_state(uid, "Live Trading Page")
+        price = get_gold_price()
+        txt = f"💹 LIVE TRADING SESSIONS\n\n💰 XAU Now: {price:.2f}\n📅 London 09:00 GMT\n📅 NY 13:30 GMT\n\nLive calls in FREE channel"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Join for Live", url=CHANNEL_LINK)],[InlineKeyboardButton("🔙 Main", callback_data="main")]])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d == "verify":
+        set_state(uid, "Create Account Page")
+        txt = f"🔗 CREATE TRADING ACCOUNT - DERIV\n\n✅ Official Deriv - Verified by Pip Hunters\n✅ Low Spread XAU + Volatility 75\n✅ MTN MoMo Withdraw Ghana\n\n👇 Step 1: Create account with our link\n👇 Step 2: Upload screenshot proof\n👇 Step 3: Get E-Book + Bonuses instantly!\n\nOfficial Link:\n{TRUSTED_BROKER_LINK}"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Step 1: Create Deriv Account Now", url=TRUSTED_BROKER_LINK)],
+            [InlineKeyboardButton("📸 Step 2: I Created Account - Upload Proof & Get E-Book", callback_data="created_account")],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="main")]
+        ])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d == "created_account":
+        set_state(uid, "Awaiting Screenshot Proof")
+        set_awaiting(uid, "proof")
+        txt = f"📸 PROOF UPLOAD - UNLOCK BENEFITS\n\nGreat Boss! To unlock your benefits:\n\n1️⃣ Create account using this link (if not done):\n{TRUSTED_BROKER_LINK}\n\n2️⃣ Take screenshot of your Deriv dashboard showing account created / email\n\n3️⃣ Upload screenshot HERE as photo (tap 📎 and send photo)\n\n🎁 INSTANT BENEFITS WHEN YOU UPLOAD:\n✅ 📖 E-Book ($100 value)\n✅ 📊 5 REAL Charts Pack\n✅ 🎁 3-Day FREE VIP Signals Trial\n✅ 💹 Live Trading Access\n\n👇 Send screenshot photo now Boss!"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel", callback_data="main")]])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d == "about":
+        set_state(uid, "About Page")
+        txt = "ℹ️ ABOUT US - PIP HUNTERS\n\n📍 Ghana SMC Traders\nFocus: XAUUSD 4129 & 4168\n\n📚 Free Education inside E-Book\n🎯 Help 10k traders pass prop firms\n\nStarted 2023 | 5000+ members"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("📖 Get Free Education (E-Book)", callback_data="ebook")],[InlineKeyboardButton("🔙 Main", callback_data="main")]])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d == "support":
+        set_state(uid, "Support Page")
+        txt = "💬 SUPPORT\n\n👤 @PipHuntersAdmin\n⏱️ Reply in 5 mins"
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("💬 Chat Admin", url="https://t.me/PipHuntersAdmin")],[InlineKeyboardButton("🔙 Main", callback_data="main")]])
+        await q.edit_message_text(txt, reply_markup=kb)
+
+    elif d.startswith("ap_"):
+        # PREVIEW FLOW - ONLY FOR ADMIN
+        _, sym, side = d.split("_")
+        price = get_gold_price()
+        msg = build_signal(sym, side)
+        pending_signal[str(uid)] = {"symbol": sym, "side": side, "entry": None, "msg": msg}
+        txt = f"🔐 ADMIN PREVIEW - ONLY YOU CAN SEE THIS\n\n💰 Live Price: {price:.2f}\n\nPreview to post:\n\n{msg}\n\n👇 Approve to post to {CHANNEL}?"
+        await q.edit_message_text(txt, reply_markup=approval_kb(sym, side, "auto"))
+
+    elif d.startswith("approve_"):
+        # FINAL POST AFTER ADMIN APPROVAL
+        try:
+            _, sym, side, e_str = d.split("_")
+            entry = None if e_str == "auto" else e_str
+            msg = build_signal(sym, side, entry)
+            await context.bot.send_message(chat_id=CHANNEL, text=msg)
+            await q.edit_message_text(f"✅ POSTED to {CHANNEL}!\n\n{msg}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Admin Panel", callback_data="admin_panel")]]))
+            pending_signal.pop(str(uid), None)
+        except Exception as e:
+            await q.edit_message_text(f"❌ Failed: {e}\nMake bot ADMIN in {CHANNEL}")
+
+    elif d == "admin_panel":
+        await admin_cmd(update, context)
+
+async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    if get_awaiting(uid) != "proof":
+        return # Ignore random photos
+    
+    # User uploaded proof!
     user = update.effective_user
-    update_user_memory(uid, user.username, user.first_name, "photo_verification")
+    username = f"@{user.username}" if user.username else f"{user.first_name}"
+    
+    # 1. Forward to verification group (if set)
+    caption_for_group = f"🚨 NEW DERIV PROOF! V11\n\n👤 User: {username}\n🆔 ID: {uid}\n📅 {time.strftime('%Y-%m-%d %H:%M')}\n✅ Check Deriv affiliate dashboard: https://t.deriv.link?t=N886WMZM3C76\n📖 User unlocked E-Book + Bonuses\n\nAction: Verify in Deriv & Mark as Converted"
     try:
-        caption = f"NEW VERIFICATION From: {user.first_name} @{user.username} ID:{uid} Last:{get_last_action(uid)}"
-        keyboard = [[InlineKeyboardButton("Approve VIP", callback_data=f"approve_{uid}"), InlineKeyboardButton("Reject", callback_data=f"reject_{uid}")]]
-        await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, caption=caption, reply_markup=InlineKeyboardMarkup(keyboard))
-        await update.message.forward(chat_id=ADMIN_ID)
+        if VERIFY_GROUP_ID:
+            await context.bot.send_photo(chat_id=VERIFY_GROUP_ID, photo=update.message.photo[-1].file_id, caption=caption_for_group)
     except Exception as e:
-        print(e)
-    await update.message.reply_text("Screenshot Received! Checking... confirmed within 10 mins.", reply_markup=back_menu())
+        print(f"Verify group send failed: {e} - Set VERIFY_GROUP_ID env var")
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 2. Give benefits instantly to user
+    set_awaiting(uid, None)
+    set_state(uid, "Benefits Unlocked")
+    
+    benefits_text = f"""✅ PROOF RECEIVED Boss! Benefits Unlocked! 🎉
+
+Thank you {user.first_name}! Screenshot sent to admin for verification.
+
+🎁 YOUR INSTANT BENEFITS:
+
+1️⃣ 📖 E-BOOK ($100 Value):
+{EBOOK_LINK}
+
+2️⃣ 📊 5 REAL CHARTS Pack:
+Inside E-Book page 15-20
+
+3️⃣ 🎁 3-Day FREE VIP Signals Trial:
+You will get 3 signals daily for 3 days in DM!
+
+4️⃣ 💹 Live Trading Access:
+Join {CHANNEL_LINK}
+
+📸 Your proof is being verified in our system. Once verified in Deriv dashboard (24h), you get permanent VIP discount!
+
+💬 Questions? @PipHuntersAdmin
+
+🔙 Tap Main Menu to continue"""
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📥 Download E-Book Now", url=EBOOK_LINK)],
+        [InlineKeyboardButton("🚀 Join FREE Channel", url=CHANNEL_LINK)],
+        [InlineKeyboardButton("🔙 Main Menu", callback_data="main")]
+    ])
+    
+    await update.message.reply_text(benefits_text, reply_markup=kb)
+
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id if update.effective_user else 0
+    is_cb = update.callback_query is not None
+    if ADMIN_ID != 0 and uid != ADMIN_ID:
+        if is_cb: await update.callback_query.edit_message_text("❌ ADMIN ONLY - This panel appears ONLY to you Boss! Set ADMIN_ID in Render ENV")
+        else: await update.message.reply_text("❌ ADMIN ONLY - This panel appears ONLY to you Boss!")
+        return
+    price = get_gold_price()
+    txt = f"🔐 ADMIN PANEL V11 - ONLY YOU SEE THIS\n\n💰 Live XAU: {price:.2f}\n📢 {CHANNEL}\n👥 Verify Group: {VERIFY_GROUP_ID if VERIFY_GROUP_ID else 'Not set (set VERIFY_GROUP_ID env)'}\n\n👇 Tap to PREVIEW (not post yet):"
+    kb = admin_kb(price)
+    if is_cb: await update.callback_query.edit_message_text(txt, reply_markup=kb)
+    else: await update.message.reply_text(txt, reply_markup=kb)
+
+async def qs_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    text = update.message.text
-    if text.startswith("/"):
-        return
-    update_user_memory(uid, update.effective_user.username, update.effective_user.first_name, f"text: {text[:30]}")
-    try:
-        if uid != ADMIN_ID:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"MESSAGE From: {update.effective_user.first_name} @{update.effective_user.username} ({uid}) Msg: {text} Reply: /reply {uid} msg")
-    except Exception as e:
-        print(e)
-    await update.message.reply_text("Thanks! Team will reply soon.", reply_markup=main_menu())
+    if ADMIN_ID != 0 and uid != ADMIN_ID: await update.message.reply_text("❌ ADMIN ONLY - Only you can use this!"); return
+    args = context.args
+    if not args: await update.message.reply_text("Usage: /qs XAUUSD BUY [price]\nExample: /qs XAUUSD BUY\nThen you approve before posting"); return
+    sym = args[0].upper(); side = args[1].upper() if len(args) > 1 else "BUY"; entry = args[2] if len(args) > 2 else None
+    price = get_gold_price() if not entry else float(entry)
+    msg = build_signal(sym, side, entry)
+    pending_signal[str(uid)] = {"symbol": sym, "side": side, "entry": entry, "msg": msg}
+    txt = f"🔐 ADMIN PREVIEW - ONLY YOU SEE THIS\n💰 Live: {price}\n\nPreview:\n\n{msg}\n\n👇 Approve?"
+    await update.message.reply_text(txt, reply_markup=approval_kb(sym, side, entry if entry else "auto"))
 
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("Only admin.")
-        return
-    if not context.args:
-        await update.message.reply_text("Usage: /broadcast msg OR /reply USER_ID msg")
-        return
-    if context.args[0].isdigit() and update.message.text.startswith("/reply"):
-        target_id = int(context.args[0])
-        msg = " ".join(context.args[1:])
-        try:
-            await context.bot.send_message(chat_id=target_id, text=f"Support: {msg}")
-            await update.message.reply_text(f"Replied to {target_id}")
-        except Exception as e:
-            await update.message.reply_text(f"Failed: {e}")
-        return
-    msg = " ".join(context.args)
-    users = get_user_list()
-    count = 0
-    for uid in users:
-        try:
-            await context.bot.send_message(chat_id=uid, text=msg, parse_mode="HTML")
-            count += 1
-        except Exception as e:
-            print(e)
-    await update.message.reply_text(f"Sent to {count} users")
+app = Flask(__name__)
+@app.route('/')
+def home(): return "V11 APPROVAL + SCREENSHOT BENEFITS LIVE - Only admin sees panels"
+@app.route('/ebook')
+def ebook(): return f"<h1>📖 Pip Hunters E-Book FREE</h1><p>Value $100</p><p>5 REAL Charts inside</p><p><a href='{TRUSTED_BROKER_LINK}'>Create Deriv Account with our link to unlock</a></p><a href='https://t.me/PipHuntersBot'>Get via bot</a>"
+@app.route('/verify')
+def verify(): return f"<meta http-equiv='refresh' content='0; url={TRUSTED_BROKER_LINK}'><h1>Redirecting to Official Deriv...</h1><a href='{TRUSTED_BROKER_LINK}'>Click if not redirected</a>"
 
+def run_flask(): app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 def main():
     threading.Thread(target=run_flask, daemon=True).start()
-    threading.Thread(target=keep_alive_ping, daemon=True).start()
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("broadcast", broadcast))
-    app.add_handler(CommandHandler("reply", broadcast))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    print("Bot V10.6 FIXED LIVE!")
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
+    if not TOKEN: print("BOT_TOKEN missing"); return
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("admin", admin_cmd))
+    application.add_handler(CommandHandler("qs", qs_cmd))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    print("V11 Starting - Approval + Screenshot Benefits")
+    application.run_polling()
+if __name__ == "__main__": main()
